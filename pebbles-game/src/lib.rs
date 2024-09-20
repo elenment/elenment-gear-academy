@@ -1,19 +1,26 @@
 #![no_std]
 
-use gstd::{msg, exec};
+use gstd::{exec, msg};
 use pebbles_game_io::*;
 
-// 定义静态可变变量，用于存储游戏状态
+// Define a static mutable variable to store the game state
 static mut PEBBLES_GAME: Option<GameState> = None;
 
-// 获取一个随机的32位数
+// Get a random 32-bit number
+#[cfg(not(test))]
 fn get_random_u32() -> u32 {
     let salt = msg::id();
     let (hash, _num) = exec::random(salt.into()).expect("get_random_u32(): random call failed");
     u32::from_le_bytes([hash[0], hash[1], hash[2], hash[3]])
 }
 
-// 找到最佳移动策略（Hard模式下）
+// Mock implementation for testing
+#[cfg(test)]
+fn get_random_u32() -> u32 {
+    42 // Return a fixed number for testing purposes
+}
+
+// Find the best move strategy (in Hard mode)
 fn find_best_move(pebbles_remaining: u32, max_pebbles_per_turn: u32) -> u32 {
     let mut best_move = 1;
     for i in 1..=max_pebbles_per_turn {
@@ -25,24 +32,30 @@ fn find_best_move(pebbles_remaining: u32, max_pebbles_per_turn: u32) -> u32 {
     best_move
 }
 
-// 初始化函数
+// Initialization function
 #[no_mangle]
 pub extern "C" fn init() {
-    // 加载初始化参数
+    // Load initialization parameters
     let init: PebblesInit = msg::load().expect("Unable to load PebblesInit");
 
-    // 检查输入数据的有效性
-    assert!(init.pebbles_count > 0, "Number of pebbles must be greater than 0");
-    assert!(init.max_pebbles_per_turn > 0, "Max pebbles per turn must be greater than 0");
+    // Check the validity of input data
+    assert!(
+        init.pebbles_count > 0,
+        "Number of pebbles must be greater than 0"
+    );
+    assert!(
+        init.max_pebbles_per_turn > 0,
+        "Max pebbles per turn must be greater than 0"
+    );
 
-    // 随机选择第一个玩家
+    // Randomly select the first player
     let first_player = if get_random_u32() % 2 == 0 {
         Player::User
     } else {
         Player::Program
     };
 
-    // 创建游戏状态
+    // Create game state
     let mut game_state = GameState {
         pebbles_count: init.pebbles_count,
         max_pebbles_per_turn: init.max_pebbles_per_turn,
@@ -52,7 +65,7 @@ pub extern "C" fn init() {
         winner: None,
     };
 
-    // 如果第一个玩家是程序，则程序进行第一次操作
+    // If the first player is the program, the program makes the first move
     if let Player::Program = first_player {
         let pebbles_to_remove = match init.difficulty {
             DifficultyLevel::Easy => (get_random_u32() % init.max_pebbles_per_turn) + 1,
@@ -62,25 +75,28 @@ pub extern "C" fn init() {
         msg::reply(PebblesEvent::CounterTurn(pebbles_to_remove), 0).expect("Unable to reply");
     }
 
-    // 保存游戏状态
+    // Save game state
     unsafe {
         PEBBLES_GAME = Some(game_state);
     }
 }
 
-// 处理函数
+// Handle function
 #[no_mangle]
 pub extern "C" fn handle() {
-    // 加载用户操作
+    // Load user action
     let action: PebblesAction = msg::load().expect("Unable to load PebblesAction");
 
     unsafe {
         if let Some(game_state) = PEBBLES_GAME.as_mut() {
             match action {
                 PebblesAction::Turn(pebbles) => {
-                    assert!(pebbles > 0 && pebbles <= game_state.max_pebbles_per_turn, "Invalid number of pebbles");
+                    assert!(
+                        pebbles > 0 && pebbles <= game_state.max_pebbles_per_turn,
+                        "Invalid number of pebbles"
+                    );
 
-                    // 用户操作
+                    // User action
                     game_state.pebbles_remaining -= pebbles;
                     if game_state.pebbles_remaining == 0 {
                         game_state.winner = Some(Player::User);
@@ -88,26 +104,42 @@ pub extern "C" fn handle() {
                         return;
                     }
 
-                    // 程序操作
+                    // Program action
                     let pebbles_to_remove = match game_state.difficulty {
-                        DifficultyLevel::Easy => (get_random_u32() % game_state.max_pebbles_per_turn) + 1,
-                        DifficultyLevel::Hard => find_best_move(game_state.pebbles_remaining, game_state.max_pebbles_per_turn),
+                        DifficultyLevel::Easy => {
+                            (get_random_u32() % game_state.max_pebbles_per_turn) + 1
+                        }
+                        DifficultyLevel::Hard => find_best_move(
+                            game_state.pebbles_remaining,
+                            game_state.max_pebbles_per_turn,
+                        ),
                     };
                     game_state.pebbles_remaining -= pebbles_to_remove;
                     if game_state.pebbles_remaining == 0 {
                         game_state.winner = Some(Player::Program);
                         msg::reply(PebblesEvent::Won(Player::Program), 0).expect("Unable to reply");
                     } else {
-                        msg::reply(PebblesEvent::CounterTurn(pebbles_to_remove), 0).expect("Unable to reply");
+                        msg::reply(PebblesEvent::CounterTurn(pebbles_to_remove), 0)
+                            .expect("Unable to reply");
                     }
-                },
+                }
                 PebblesAction::GiveUp => {
                     game_state.winner = Some(Player::Program);
                     msg::reply(PebblesEvent::Won(Player::Program), 0).expect("Unable to reply");
-                },
-                PebblesAction::Restart { difficulty, pebbles_count, max_pebbles_per_turn } => {
-                    assert!(pebbles_count > 0, "Number of pebbles must be greater than 0");
-                    assert!(max_pebbles_per_turn > 0, "Max pebbles per turn must be greater than 0");
+                }
+                PebblesAction::Restart {
+                    difficulty,
+                    pebbles_count,
+                    max_pebbles_per_turn,
+                } => {
+                    assert!(
+                        pebbles_count > 0,
+                        "Number of pebbles must be greater than 0"
+                    );
+                    assert!(
+                        max_pebbles_per_turn > 0,
+                        "Max pebbles per turn must be greater than 0"
+                    );
 
                     let first_player = if get_random_u32() % 2 == 0 {
                         Player::User
@@ -125,10 +157,13 @@ pub extern "C" fn handle() {
                     if let Player::Program = first_player {
                         let pebbles_to_remove = match difficulty {
                             DifficultyLevel::Easy => (get_random_u32() % max_pebbles_per_turn) + 1,
-                            DifficultyLevel::Hard => find_best_move(pebbles_count, max_pebbles_per_turn),
+                            DifficultyLevel::Hard => {
+                                find_best_move(pebbles_count, max_pebbles_per_turn)
+                            }
                         };
                         game_state.pebbles_remaining -= pebbles_to_remove;
-                        msg::reply(PebblesEvent::CounterTurn(pebbles_to_remove), 0).expect("Unable to reply");
+                        msg::reply(PebblesEvent::CounterTurn(pebbles_to_remove), 0)
+                            .expect("Unable to reply");
                     }
                 }
             }
@@ -136,7 +171,7 @@ pub extern "C" fn handle() {
     }
 }
 
-// 状态函数
+// State function
 #[no_mangle]
 extern "C" fn state() {
     unsafe {
