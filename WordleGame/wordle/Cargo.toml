@@ -1,0 +1,17 @@
+[package]
+name = "wordle"
+version.workspace = true
+edition.workspace = true
+publish.workspace = true
+
+[dependencies]
+gstd.workspace = true
+wordle-io.workspace = true
+
+[build-dependencies]
+gear-wasm-builder.workspace = true
+wordle-io.workspace = true
+
+[dev-dependencies]
+gtest.workspace = true
+wordle-io.workspace = true
