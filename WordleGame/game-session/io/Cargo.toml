@@ -1,0 +1,12 @@
+[package]
+name = "game-session-io"
+version.workspace = true
+edition.workspace = true
+publish.workspace = true
+
+[dependencies]
+gstd.workspace = true
+gmeta.workspace = true
+parity-scale-codec.workspace = true
+scale-info.workspace = true
+wordle-io = { path = "../../wordle/io"}
