@@ -68,7 +68,6 @@ extern "C" fn handle() {
                     debug!("===CHECK GAME STATUS===");
                     let current_block = exec::block_height() as u64;
 
-                    // 检查游戏是否超时
                     if current_block >= (session.start_block + 200).into() {
                         session.session_status = SessionStatus::GameEnded { result: GameResult::Lose };
                         let current_game_status = get_game_status();
