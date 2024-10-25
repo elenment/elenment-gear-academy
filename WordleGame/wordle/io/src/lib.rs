@@ -20,7 +20,7 @@ pub enum Action {
     CheckWord { user: ActorId, word: String },
 }
 
-#[derive(Debug, Clone, Encode, Decode, TypeInfo)]
+#[derive(Debug, Clone, Encode, Decode, TypeInfo, PartialEq)]
 pub enum Event {
     GameStarted {
         user: ActorId,
